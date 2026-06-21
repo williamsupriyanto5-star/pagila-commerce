@@ -256,7 +256,7 @@ fetch("../api/top_customer.php")
     .then(res => res.json())
     .then(data => {
 
-        let label = data.map(item => "Customer " + item.customer_key);
+        let label = data.map(item => item.city ? ("City " + item.city) : ("Customer " + item.customer_key));
 
         let total = data.map(item => parseFloat(item.customer_lifetime_value));
 

@@ -6,11 +6,18 @@ $sql="
 
 SELECT
 
-customer_key,
+fa.customer_key,
 
-customer_lifetime_value
+MAX(fa.customer_lifetime_value) AS customer_lifetime_value,
 
-FROM fact_customer_activity
+MAX(ct.city) AS city
+
+FROM fact_customer_activity fa
+
+LEFT JOIN stg_city ct
+ON ct.city_id = fa.geography_key
+
+GROUP BY fa.customer_key
 
 ORDER BY customer_lifetime_value DESC
 
