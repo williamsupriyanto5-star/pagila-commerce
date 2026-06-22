@@ -1,5 +1,0 @@
-.codex/
-node_modules/
-vendor/
-config/db.php
-*.log

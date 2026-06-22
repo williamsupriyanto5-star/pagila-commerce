@@ -71,6 +71,32 @@ $commerceReady = tableExists($conn, 'commerce_orders')
     && tableExists($conn, 'commerce_order_items')
     && tableExists($conn, 'commerce_customers');
 
+$stagingCustomerTable = tableExists($conn, 'staging_customers') ? 'staging_customers' : (tableExists($conn, 'staging_customer') ? 'staging_customer' : '');
+$customerSourceLabel = $stagingCustomerTable !== '' ? $stagingCustomerTable : 'commerce_customers';
+$customerSourceSql = $stagingCustomerTable !== ''
+    ? "
+        SELECT customer_id,
+               COALESCE(NULLIF(INITCAP(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, ''))), ''), email, 'Customer #' || customer_id::text) AS full_name,
+               COALESCE(email, '-') AS email,
+               COALESCE(phone, '-') AS phone,
+               COALESCE(city, '-') AS city,
+               COALESCE(country, '-') AS country,
+               COALESCE(active, false) AS is_active,
+               create_date::date AS registered_at
+        FROM public." . $stagingCustomerTable . "
+    "
+    : "
+        SELECT customer_id,
+               full_name,
+               email,
+               COALESCE(phone, '-') AS phone,
+               city,
+               '-' AS country,
+               true AS is_active,
+               registered_at
+        FROM public.commerce_customers
+    ";
+
 $orderFilters = [];
 $orderParams = [];
 if ($dateFrom !== '') {
@@ -197,7 +223,7 @@ $orderRows = $commerceReady ? fetchRows($conn, "
            c.full_name,
            COUNT(oi.order_item_id) AS item_count
     FROM public.commerce_orders o
-    INNER JOIN public.commerce_customers c ON c.customer_id = o.customer_id
+    INNER JOIN (" . $customerSourceSql . ") c ON c.customer_id = o.customer_id
     LEFT JOIN public.commerce_order_items oi ON oi.order_id = o.order_id
     " . $orderWhere . "
     GROUP BY o.order_id, c.full_name
@@ -207,15 +233,25 @@ $orderRows = $commerceReady ? fetchRows($conn, "
 
 $customerRows = $commerceReady ? fetchRows($conn, "
     SELECT c.full_name,
+           c.email,
+           c.phone,
            c.city,
-           c.segment,
+           c.country,
+           c.is_active,
+           CASE
+               WHEN c.is_active = false THEN 'At Risk'
+               WHEN COALESCE(SUM(o.total_amount), 0) >= 500000 THEN 'VIP'
+               WHEN COUNT(o.order_id) > 0 THEN 'Loyal'
+               ELSE 'New'
+           END AS segment,
            COUNT(o.order_id) AS orders_count,
            COALESCE(SUM(o.total_amount), 0) AS lifetime_value,
-           MAX(o.order_date)::date AS last_order
-    FROM public.commerce_customers c
+           MAX(o.order_date)::date AS last_order,
+           c.registered_at
+    FROM (" . $customerSourceSql . ") c
     LEFT JOIN public.commerce_orders o ON o.customer_id = c.customer_id
-    GROUP BY c.customer_id
-    ORDER BY lifetime_value DESC
+    GROUP BY c.customer_id, c.full_name, c.email, c.phone, c.city, c.country, c.is_active, c.registered_at
+    ORDER BY lifetime_value DESC, c.customer_id ASC
     LIMIT 12
 ") : [];
 
@@ -1169,15 +1205,18 @@ $pageTitles = [
             </div>
         <?php elseif ($page === 'customers'): ?>
             <div class="panel">
-                <div class="panel-title"><h2><i class="fa-solid fa-users me-1"></i> Customer Lifetime Value</h2><span class="badge text-bg-light border">CRM</span></div>
+                <div class="panel-title"><h2><i class="fa-solid fa-users me-1"></i> Customer Lifetime Value</h2><span class="badge text-bg-light border"><?= h($customerSourceLabel); ?></span></div>
                 <div class="table-responsive">
                     <table class="table commerce-table table-hover">
-                        <thead><tr><th>Customer</th><th>Kota</th><th>Segment</th><th>Order</th><th>Lifetime Value</th><th>Last Order</th></tr></thead>
+                        <thead><tr><th>Customer</th><th>Email</th><th>Kota</th><th>Negara</th><th>Status</th><th>Segment</th><th>Order</th><th>Lifetime Value</th><th>Last Order</th></tr></thead>
                         <tbody>
                             <?php foreach ($customerRows as $customer): ?>
                                 <tr>
-                                    <td><strong><?= h($customer['full_name']); ?></strong></td>
+                                    <td><strong><?= h($customer['full_name']); ?></strong><br><span class="text-muted"><?= h($customer['phone']); ?></span></td>
+                                    <td><?= h($customer['email']); ?></td>
                                     <td><?= h($customer['city']); ?></td>
+                                    <td><?= h($customer['country']); ?></td>
+                                    <td><span class="status-pill <?= ($customer['is_active'] === true || $customer['is_active'] === '1' || $customer['is_active'] === 't') ? 'status-good' : 'status-risk'; ?>"><?= ($customer['is_active'] === true || $customer['is_active'] === '1' || $customer['is_active'] === 't') ? 'Active' : 'Inactive'; ?></span></td>
                                     <td><span class="status-pill <?= $customer['segment'] === 'At Risk' ? 'status-risk' : ($customer['segment'] === 'New' ? 'status-watch' : 'status-good'); ?>"><?= h($customer['segment']); ?></span></td>
                                     <td><?= number_format($customer['orders_count']); ?></td>
                                     <td class="fw-bold"><?= rupiah($customer['lifetime_value']); ?></td>
