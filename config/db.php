@@ -1,5 +1,7 @@
 <?php
 function koneksiDB() {
+    $localConfigPath = __DIR__ . '/db.local.php';
+    $localConfig = file_exists($localConfigPath) ? require $localConfigPath : [];
     $databaseUrl = getenv('DATABASE_URL');
 
     if ($databaseUrl) {
@@ -11,11 +13,11 @@ function koneksiDB() {
         $password = $database['pass'] ?? '';
     } else {
         // Railway PostgreSQL menyediakan PG*, sedangkan lokal memakai DB* fallback.
-        $host     = getenv('PGHOST') ?: (getenv('DB_HOST') ?: 'localhost');
-        $port     = getenv('PGPORT') ?: (getenv('DB_PORT') ?: '5432');
-        $dbname   = getenv('PGDATABASE') ?: (getenv('DB_NAME') ?: 'project_dwh');
-        $user     = getenv('PGUSER') ?: (getenv('DB_USER') ?: 'postgres');
-        $password = getenv('PGPASSWORD') ?: (getenv('DB_PASS') ?: 'root');
+        $host     = $localConfig['host'] ?? (getenv('PGHOST') ?: (getenv('DB_HOST') ?: 'localhost'));
+        $port     = $localConfig['port'] ?? (getenv('PGPORT') ?: (getenv('DB_PORT') ?: '5432'));
+        $dbname   = $localConfig['dbname'] ?? (getenv('PGDATABASE') ?: (getenv('DB_NAME') ?: 'project_dwh'));
+        $user     = $localConfig['user'] ?? (getenv('PGUSER') ?: (getenv('DB_USER') ?: 'postgres'));
+        $password = $localConfig['password'] ?? (getenv('PGPASSWORD') ?: (getenv('DB_PASS') ?: 'root'));
     }
 
     try {
