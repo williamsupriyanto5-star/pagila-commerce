@@ -1,15 +1,24 @@
 <?php
 function koneksiDB() {
-    // Railway/Render akan membaca variabel yang diatur di sistem mereka
-    // Jika tidak ditemukan (saat di laptop sendiri), maka akan menggunakan nilai default
-    $host     = getenv('DB_HOST') ?: 'localhost';
-    $port     = getenv('DB_PORT') ?: '5432';
-    $dbname   = getenv('DB_NAME') ?: 'project_dwh';
-    $user     = getenv('DB_USER') ?: 'postgres';
-    $password = getenv('DB_PASS') ?: 'root';
+    $databaseUrl = getenv('DATABASE_URL');
+
+    if ($databaseUrl) {
+        $database = parse_url($databaseUrl);
+        $host = $database['host'] ?? 'localhost';
+        $port = $database['port'] ?? '5432';
+        $dbname = isset($database['path']) ? ltrim($database['path'], '/') : 'project_dwh';
+        $user = $database['user'] ?? 'postgres';
+        $password = $database['pass'] ?? '';
+    } else {
+        // Railway PostgreSQL menyediakan PG*, sedangkan lokal memakai DB* fallback.
+        $host     = getenv('PGHOST') ?: (getenv('DB_HOST') ?: 'localhost');
+        $port     = getenv('PGPORT') ?: (getenv('DB_PORT') ?: '5432');
+        $dbname   = getenv('PGDATABASE') ?: (getenv('DB_NAME') ?: 'project_dwh');
+        $user     = getenv('PGUSER') ?: (getenv('DB_USER') ?: 'postgres');
+        $password = getenv('PGPASSWORD') ?: (getenv('DB_PASS') ?: 'root');
+    }
 
     try {
-        // Menggunakan variabel di atas
         $conn = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $password);
         $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         return $conn;
